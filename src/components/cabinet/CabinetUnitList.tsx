@@ -9,11 +9,12 @@ import { Separator } from "@/components/ui/separator";
 import { CabinetUnitForm } from "./CabinetUnitForm";
 import { formatCurrency, generateId } from "@/lib/utils";
 import { calculateCabinetUnit } from "@/lib/calculations/cabinet";
-import { saveCabinetEstimate } from "@/lib/actions/estimates";
+import { saveCabinetEstimate, updateCabinetEstimate } from "@/lib/actions/estimates";
 import type { CabinetUnitInput } from "@/types";
 
 interface Props {
   projectId: string;
+  itemId?: string;
   initialUnits?: CabinetUnitInput[];
 }
 
@@ -35,7 +36,7 @@ function emptyUnit(): CabinetUnitInput {
   };
 }
 
-export function CabinetUnitList({ projectId, initialUnits }: Props) {
+export function CabinetUnitList({ projectId, itemId, initialUnits }: Props) {
   const [units, setUnits] = useState<CabinetUnitInput[]>(initialUnits ?? [emptyUnit()]);
   const [expandedId, setExpandedId] = useState<string>(units[0]?.id ?? "");
   const [saving, setSaving] = useState(false);
@@ -62,7 +63,9 @@ export function CabinetUnitList({ projectId, initialUnits }: Props) {
   const handleSave = async () => {
     setSaving(true);
     setSaveMsg(null);
-    const result = await saveCabinetEstimate({ projectId, units });
+    const result = itemId
+      ? await updateCabinetEstimate(itemId, { projectId, units })
+      : await saveCabinetEstimate({ projectId, units });
     setSaving(false);
     setSaveMsg(result.success ? "已儲存！" : "儲存失敗，請稍後再試");
     if (result.success) setTimeout(() => setSaveMsg(null), 3000);

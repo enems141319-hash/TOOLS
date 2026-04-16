@@ -135,6 +135,36 @@ export async function saveCeilingEstimate(rawData: unknown) {
   return { success: true, itemId: item.id };
 }
 
+// ─── 更新天花板估價 ───────────────────────────────────────────────────────────
+
+export async function updateCeilingEstimate(itemId: string, rawData: unknown) {
+  const userId = await requireUserId();
+
+  const parsed = ceilingProjectInputSchema.safeParse(rawData);
+  if (!parsed.success) {
+    return { success: false, errors: parsed.error.flatten() };
+  }
+
+  const { projectId, label, input } = parsed.data;
+  const owned = await verifyProjectOwnership(projectId, userId);
+  if (!owned) return { success: false, errors: { _: ["無此專案"] } };
+
+  const result = calculateCeilingMaterial(input);
+
+  await prisma.estimateItem.update({
+    where: { id: itemId },
+    data: {
+      label: label ?? "天花板",
+      inputData: input as unknown as object,
+      resultData: result as unknown as object,
+      totalCost: result.totalCost,
+    },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  return { success: true };
+}
+
 // ─── 刪除估價項目 ─────────────────────────────────────────────────────────────
 
 export async function deleteEstimateItem(itemId: string, projectId: string): Promise<void> {

@@ -9,15 +9,18 @@ import { Button } from "@/components/ui/button";
 import { MaterialDropdown } from "@/components/shared/MaterialDropdown";
 import { CeilingResultPanel } from "./CeilingResultPanel";
 import { calculateCeilingMaterial } from "@/lib/calculations/ceiling";
-import { saveCeilingEstimate } from "@/lib/actions/estimates";
+import { saveCeilingEstimate, updateCeilingEstimate } from "@/lib/actions/estimates";
 import type { CeilingInput, CeilingResult } from "@/types";
 
 interface Props {
   projectId: string;
+  itemId?: string;
+  initialInput?: CeilingInput;
 }
 
 const DEFAULT_INPUT: CeilingInput = {
   areaPing: 5,
+  autoArea: true,
   autoPerimeter: true,
   roomLengthM: 4,
   roomWidthM: 3,
@@ -27,12 +30,30 @@ const DEFAULT_INPUT: CeilingInput = {
   perimeterAngleMaterialRef: null,
 };
 
-export function CeilingForm({ projectId }: Props) {
-  const [input, setInput] = useState<CeilingInput>(DEFAULT_INPUT);
+function calcAreaPing(lengthM?: number, widthM?: number): number {
+  if (!lengthM || !widthM) return 0;
+  return Math.round((lengthM * widthM / 3.30579) * 100) / 100;
+}
+
+export function CeilingForm({ projectId, itemId, initialInput }: Props) {
+  const [input, setInput] = useState<CeilingInput>(initialInput ?? DEFAULT_INPUT);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   const update = (patch: Partial<CeilingInput>) => setInput((prev) => ({ ...prev, ...patch }));
+
+  const handleDimensionChange = (field: "roomLengthM" | "roomWidthM", value: number) => {
+    const next = { ...input, [field]: value };
+    if (input.autoArea) {
+      const derived = calcAreaPing(
+        field === "roomLengthM" ? value : input.roomLengthM,
+        field === "roomWidthM" ? value : input.roomWidthM,
+      );
+      update({ [field]: value, areaPing: derived });
+    } else {
+      update({ [field]: value });
+    }
+  };
 
   let result: CeilingResult | null = null;
   try {
@@ -43,7 +64,9 @@ export function CeilingForm({ projectId }: Props) {
 
   const handleSave = async () => {
     setSaving(true);
-    const res = await saveCeilingEstimate({ projectId, input });
+    const res = itemId
+      ? await updateCeilingEstimate(itemId, { projectId, input })
+      : await saveCeilingEstimate({ projectId, input });
     setSaving(false);
     setSaveMsg(res.success ? "已儲存！" : "儲存失敗");
     if (res.success) setTimeout(() => setSaveMsg(null), 3000);
@@ -55,43 +78,66 @@ export function CeilingForm({ projectId }: Props) {
       <div className="space-y-5">
         <section className="space-y-3">
           <h3 className="font-semibold text-sm border-b pb-1">天花板資訊</h3>
-          <div>
-            <Label className="text-xs text-muted-foreground">坪數</Label>
-            <Input
-              type="number" min={0.1} step={0.5} className="mt-1"
-              value={input.areaPing}
-              onChange={(e) => update({ areaPing: Number(e.target.value) })}
-            />
+
+          {/* 房間長寬（永遠顯示） */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground">房間長(m)</Label>
+              <Input
+                type="number" min={0.1} step={0.1} className="mt-1"
+                value={input.roomLengthM ?? ""}
+                onChange={(e) => handleDimensionChange("roomLengthM", Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">房間寬(m)</Label>
+              <Input
+                type="number" min={0.1} step={0.1} className="mt-1"
+                value={input.roomWidthM ?? ""}
+                onChange={(e) => handleDimensionChange("roomWidthM", Number(e.target.value))}
+              />
+            </div>
           </div>
 
+          {/* 坪數：自動帶入或手動 */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <Label className="text-xs text-muted-foreground">坪數</Label>
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground">由長寬自動計算</Label>
+                <Switch
+                  checked={input.autoArea}
+                  onCheckedChange={(v) => {
+                    const derived = v ? calcAreaPing(input.roomLengthM, input.roomWidthM) : input.areaPing;
+                    update({ autoArea: v, areaPing: derived || input.areaPing });
+                  }}
+                />
+              </div>
+            </div>
+            <Input
+              type="number" min={0.1} step={0.5}
+              value={input.areaPing}
+              readOnly={input.autoArea}
+              className={input.autoArea ? "bg-muted/30 text-muted-foreground" : ""}
+              onChange={(e) => !input.autoArea && update({ areaPing: Number(e.target.value) })}
+            />
+            {input.autoArea && input.roomLengthM && input.roomWidthM && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {input.roomLengthM} × {input.roomWidthM} m² ÷ 3.30579 = {input.areaPing} 坪
+              </p>
+            )}
+          </div>
+
+          {/* 周長 */}
           <div className="flex items-center gap-3">
             <Switch
               checked={input.autoPerimeter}
               onCheckedChange={(v) => update({ autoPerimeter: v })}
             />
-            <Label className="text-xs">自動計算周長（由房間尺寸）</Label>
+            <Label className="text-xs">自動計算周長（由長寬）</Label>
           </div>
 
-          {input.autoPerimeter ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs text-muted-foreground">房間長(m)</Label>
-                <Input
-                  type="number" min={0.1} step={0.1} className="mt-1"
-                  value={input.roomLengthM ?? ""}
-                  onChange={(e) => update({ roomLengthM: Number(e.target.value) })}
-                />
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">房間寬(m)</Label>
-                <Input
-                  type="number" min={0.1} step={0.1} className="mt-1"
-                  value={input.roomWidthM ?? ""}
-                  onChange={(e) => update({ roomWidthM: Number(e.target.value) })}
-                />
-              </div>
-            </div>
-          ) : (
+          {!input.autoPerimeter && (
             <div>
               <Label className="text-xs text-muted-foreground">手動周長(m)</Label>
               <Input

@@ -3,6 +3,7 @@
 
 import type { CabinetUnitResult } from "@/types";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { UNIT_CONFIG } from "@/lib/config/units";
 import { AreaDisplay } from "@/components/shared/AreaDisplay";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -56,8 +57,45 @@ function PanelTable({ title, rows }: { title: string; rows: CabinetUnitResult["p
   );
 }
 
+// ─── 板材統計（同材料同厚度 → 按尺寸彙整片數）────────────────────────────────
+
+interface SizeCount { widthCm: number; heightCm: number; count: number; totalCai: number }
+interface MaterialGroup { materialName: string; totalCount: number; totalCai: number; sizes: SizeCount[] }
+
+function buildPanelStats(result: CabinetUnitResult): MaterialGroup[] {
+  const allPanels = [...result.panels, ...result.internalParts];
+  const map = new Map<string, { materialName: string; sizeMap: Map<string, SizeCount> }>();
+
+  for (const p of allPanels) {
+    const key = p.materialRef?.materialId ?? "__none__";
+    const name = p.materialRef?.materialName ?? "未選材料";
+
+    if (!map.has(key)) map.set(key, { materialName: name, sizeMap: new Map() });
+    const group = map.get(key)!;
+
+    const sizeKey = `${p.widthCm}x${p.heightCm}`;
+    if (!group.sizeMap.has(sizeKey)) {
+      group.sizeMap.set(sizeKey, { widthCm: p.widthCm, heightCm: p.heightCm, count: 0, totalCai: 0 });
+    }
+    const sizeEntry = group.sizeMap.get(sizeKey)!;
+    sizeEntry.count += p.quantity;
+    sizeEntry.totalCai += (p.widthCm * p.heightCm * p.quantity) / UNIT_CONFIG.CAI_CM2;
+  }
+
+  return Array.from(map.values()).map(({ materialName, sizeMap }) => {
+    const sizes = Array.from(sizeMap.values());
+    return {
+      materialName,
+      totalCount: sizes.reduce((s, v) => s + v.count, 0),
+      totalCai: sizes.reduce((s, v) => s + v.totalCai, 0),
+      sizes,
+    };
+  });
+}
+
 export function CabinetResultPanel({ result }: Props) {
   const { summary } = result;
+  const panelStats = buildPanelStats(result);
 
   return (
     <div className="space-y-4">
@@ -94,6 +132,7 @@ export function CabinetResultPanel({ result }: Props) {
                   <th className="text-right py-1 font-medium">尺寸(cm)</th>
                   <th className="text-right py-1 font-medium">數量</th>
                   <th className="text-right py-1 font-medium">面積</th>
+                  <th className="text-right py-1 font-medium">材料</th>
                   <th className="text-right py-1 font-medium">小計</th>
                 </tr>
               </thead>
@@ -109,6 +148,9 @@ export function CabinetResultPanel({ result }: Props) {
                     <td className="text-right py-1 text-muted-foreground">{d.widthCm} × {d.heightCm}</td>
                     <td className="text-right py-1">{d.quantity}</td>
                     <td className="text-right py-1"><AreaDisplay area={d.totalArea} /></td>
+                    <td className="text-right py-1 text-muted-foreground max-w-[100px] truncate">
+                      {d.materialRef?.materialName ?? <span className="text-orange-500">未選材料</span>}
+                    </td>
                     <td className="text-right py-1 font-medium">{formatCurrency(d.subtotal)}</td>
                   </tr>
                 ))}
@@ -126,6 +168,7 @@ export function CabinetResultPanel({ result }: Props) {
                 <tr className="border-b text-muted-foreground">
                   <th className="text-left py-1 font-medium">項目</th>
                   <th className="text-left py-1 font-medium">說明</th>
+                  <th className="text-right py-1 font-medium">材料</th>
                   <th className="text-right py-1 font-medium">數量</th>
                   <th className="text-right py-1 font-medium">小計</th>
                 </tr>
@@ -135,6 +178,9 @@ export function CabinetResultPanel({ result }: Props) {
                   <tr key={h.id} className="border-b border-muted/30 hover:bg-muted/20">
                     <td className="py-1">{h.name}</td>
                     <td className="py-1 text-muted-foreground">{h.description}</td>
+                    <td className="text-right py-1 text-muted-foreground max-w-[100px] truncate">
+                      {h.materialRef?.materialName ?? <span className="text-orange-500">未選材料</span>}
+                    </td>
                     <td className="text-right py-1">{h.quantity}</td>
                     <td className="text-right py-1 font-medium">{formatCurrency(h.subtotal)}</td>
                   </tr>
@@ -163,6 +209,36 @@ export function CabinetResultPanel({ result }: Props) {
           </div>
         )}
       </div>
+
+      {/* 板材統計 */}
+      {panelStats.length > 0 && (
+        <>
+          <Separator />
+          <div>
+            <h4 className="text-sm font-semibold mb-2">板材統計</h4>
+            <div className="space-y-2">
+              {panelStats.map((group) => (
+                <div key={group.materialName} className="text-xs border rounded p-2 bg-muted/10">
+                  <div className="flex justify-between font-semibold mb-1">
+                    <span className={group.materialName === "未選材料" ? "text-orange-500" : ""}>
+                      {group.materialName}
+                    </span>
+                    <span>{group.totalCount} 片 · {formatNumber(group.totalCai, 2)} 才</span>
+                  </div>
+                  <div className="space-y-0.5 pl-2 text-muted-foreground">
+                    {group.sizes.map((s) => (
+                      <div key={`${s.widthCm}x${s.heightCm}`} className="flex justify-between">
+                        <span>{s.widthCm} × {s.heightCm} cm</span>
+                        <span>{s.count} 片 · {formatNumber(s.totalCai, 2)} 才</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* 成本分解 */}
       <Separator />

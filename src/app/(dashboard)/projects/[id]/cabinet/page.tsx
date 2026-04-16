@@ -57,7 +57,7 @@ export default async function CabinetEstimatePage({
         </p>
       </div>
 
-      <CabinetUnitList projectId={projectId} initialUnits={initialUnits} />
+      <CabinetUnitList projectId={projectId} itemId={itemId} initialUnits={initialUnits} />
     </div>
   );
 }

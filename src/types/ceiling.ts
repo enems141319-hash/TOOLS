@@ -4,6 +4,7 @@ import type { MaterialRef } from "./cabinet";
 
 export interface CeilingInput {
   areaPing: number;
+  autoArea?: boolean;
   autoPerimeter: boolean;
   roomLengthM?: number;
   roomWidthM?: number;

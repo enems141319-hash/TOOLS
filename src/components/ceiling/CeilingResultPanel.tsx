@@ -64,9 +64,17 @@ export function CeilingResultPanel({ result }: Props) {
 
       <Separator />
 
-      <div className="flex justify-between font-bold text-base">
-        <span>合計</span>
-        <span className="text-primary">{formatCurrency(result.totalCost)}</span>
+      <div className="space-y-1 text-sm">
+        {result.areaPing > 0 && (
+          <div className="flex justify-between text-muted-foreground">
+            <span>每坪均價</span>
+            <span>{formatCurrency(Math.round(result.totalCost / result.areaPing))} / 坪</span>
+          </div>
+        )}
+        <div className="flex justify-between font-bold text-base">
+          <span>合計</span>
+          <span className="text-primary">{formatCurrency(result.totalCost)}</span>
+        </div>
       </div>
     </div>
   );

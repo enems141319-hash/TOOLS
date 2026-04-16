@@ -10,12 +10,17 @@ import { CeilingForm } from "@/components/ceiling/CeilingForm";
 
 export const metadata: Metadata = { title: "天花板估價" };
 
+import type { CeilingInput } from "@/types";
+
 export default async function CeilingEstimatePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ itemId?: string }>;
 }) {
   const { id: projectId } = await params;
+  const { itemId } = await searchParams;
   const session = await auth();
   const userId = session!.user.id;
 
@@ -24,6 +29,16 @@ export default async function CeilingEstimatePage({
     select: { id: true, name: true },
   });
   if (!project) notFound();
+
+  let initialInput: CeilingInput | undefined;
+  if (itemId) {
+    const item = await prisma.estimateItem.findFirst({
+      where: { id: itemId, projectId, moduleType: "CEILING" },
+    });
+    if (item) {
+      initialInput = item.inputData as unknown as CeilingInput;
+    }
+  }
 
   return (
     <div className="p-6 space-y-5">
@@ -41,7 +56,7 @@ export default async function CeilingEstimatePage({
         </p>
       </div>
 
-      <CeilingForm projectId={projectId} />
+      <CeilingForm projectId={projectId} itemId={itemId} initialInput={initialInput} />
     </div>
   );
 }
