@@ -20,5 +20,7 @@ export async function GET(request: Request) {
     orderBy: [{ category: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
   });
 
-  return NextResponse.json(materials);
+  return NextResponse.json(
+    materials.map((m) => ({ ...m, price: Number(m.price) }))
+  );
 }
